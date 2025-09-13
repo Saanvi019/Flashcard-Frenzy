@@ -7,8 +7,6 @@ import { use } from "react";
 import { useRouter } from "next/navigation";
 import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
-
-
 interface Flashcard {
   id: string;
   question: string;
@@ -33,20 +31,17 @@ export default function GamePage({ params }: { params: Promise<{ matchId: string
   const [timeLeft, setTimeLeft] = useState(10);
   const [answered, setAnswered] = useState(false);
 
-  
   const [feedback, setFeedback] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [questionStartTime, setQuestionStartTime] = useState<number>(Date.now());
 
+  useEffect(() => {
+    setQuestionStartTime(Date.now());
+    setTimeLeft(10);
+    setAnswered(false); 
+  }, [currentIndex]);
 
-useEffect(() => {
-  setQuestionStartTime(Date.now());
-  setTimeLeft(10);
-  setAnswered(false); 
-}, [currentIndex]);
-
- 
   useEffect(() => {
     const fetchFlashcards = async () => {
       const { data, error } = await supabase.from("flashcards").select("*");
@@ -56,7 +51,6 @@ useEffect(() => {
     fetchFlashcards();
   }, []);
 
-  
   useEffect(() => {
     if (!matchId) return;
     const subscription = supabase
@@ -65,17 +59,21 @@ useEffect(() => {
         "postgres_changes",
         { event: "*", schema: "public", table: "matches", filter: `id=eq.${matchId}` },
         (payload: RealtimePostgresChangesPayload<Match>) => {
-          setMatch(payload.new);
+          // ✅ Fix: Check if payload.new exists and has the required properties
+          if (payload.new && typeof payload.new === 'object' && 'id' in payload.new) {
+            const matchData = payload.new as Match;
+            setMatch(matchData);
 
-          if (payload.new.scores && flashcards.length > 0) {
-            const answeredIds = Object.keys(payload.new.scores);
-            const nextIndex = flashcards.findIndex((f) => !answeredIds.includes(f.id));
-            if (nextIndex !== -1) {
-              setCurrentIndex(nextIndex);
-              setTimeLeft(10);
-              setFeedback({ message: "New question!", type: "info" });
-            } else {
-              setFeedback({ message: "Game Over!", type: "info" });
+            if (matchData.scores && flashcards.length > 0) {
+              const answeredIds = Object.keys(matchData.scores);
+              const nextIndex = flashcards.findIndex((f) => !answeredIds.includes(f.id));
+              if (nextIndex !== -1) {
+                setCurrentIndex(nextIndex);
+                setTimeLeft(10);
+                setFeedback({ message: "New question!", type: "info" });
+              } else {
+                setFeedback({ message: "Game Over!", type: "info" });
+              }
             }
           }
         }
@@ -87,36 +85,32 @@ useEffect(() => {
     };
   }, [matchId, flashcards]);
 
-  
   useEffect(() => {
-  if (timeLeft <= 0) {
-    const currentFlashcard = flashcards[currentIndex];
-    if (currentFlashcard && user) {
-      
-      handleAnswer("").then(() => {
-        
-        const nextIndex = currentIndex + 1;
-        if (nextIndex < flashcards.length) {
-          setCurrentIndex(nextIndex);
-          setTimeLeft(10);
-          setFeedback({ message: "Next question!", type: "info" });
-        } else {
-          setFeedback({ message: "🎉 Game Over!", type: "info" });
-          setTimeout(() => {
-    router.push(`/match/${matchId}/history`);
-  }, 2000);
-        }
-      });
+    if (timeLeft <= 0) {
+      const currentFlashcard = flashcards[currentIndex];
+      if (currentFlashcard && user) {
+        handleAnswer("").then(() => {
+          const nextIndex = currentIndex + 1;
+          if (nextIndex < flashcards.length) {
+            setCurrentIndex(nextIndex);
+            setTimeLeft(10);
+            setFeedback({ message: "Next question!", type: "info" });
+          } else {
+            setFeedback({ message: "🎉 Game Over!", type: "info" });
+            setTimeout(() => {
+              router.push(`/match/${matchId}/history`);
+            }, 2000);
+          }
+        });
+      }
+      return;
     }
-    return;
-  }
 
-  timerRef.current = setTimeout(() => setTimeLeft((t) => t - 1), 1000);
+    timerRef.current = setTimeout(() => setTimeLeft((t) => t - 1), 1000);
 
-  return () => clearTimeout(timerRef.current!);
-}, [timeLeft, currentIndex, flashcards]);
+    return () => clearTimeout(timerRef.current!);
+  }, [timeLeft, currentIndex, flashcards, user, matchId, router]);
 
-  
   useEffect(() => {
     if (feedback) {
       const timer = setTimeout(() => setFeedback(null), 3000);
@@ -126,20 +120,20 @@ useEffect(() => {
 
   const handleAnswer = async (selectedOption: string) => {
     if (answered) return; 
-  setAnswered(true);
+    setAnswered(true);
 
-  
     const timeTaken = (Date.now() - questionStartTime) / 1000; 
     if (!user || !flashcards.length) return;
     
     const currentFlashcard = flashcards[currentIndex];
-    const js=JSON.stringify({
-          userId: user.id,
-          flashcardId: currentFlashcard.id,
-          selectedOption,
-          timeTaken,
-        });
-        console.log(js);
+    const js = JSON.stringify({
+      userId: user.id,
+      flashcardId: currentFlashcard.id,
+      selectedOption,
+      timeTaken,
+    });
+    console.log(js);
+
     try {
       const res = await fetch(`/api/match/${matchId}/answer`, {
         method: "POST",
@@ -202,7 +196,6 @@ useEffect(() => {
           ))}
       </div>
 
-      
       {feedback && (
         <div
           className={`absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded shadow-lg transition ${
