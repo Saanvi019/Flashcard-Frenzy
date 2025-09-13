@@ -64,7 +64,7 @@ useEffect(() => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "matches", filter: `id=eq.${matchId}` },
-        (payload: RealtimePostgresChangesPayload<any>) => {
+        (payload: RealtimePostgresChangesPayload<Match>) => {
           setMatch(payload.new);
 
           if (payload.new.scores && flashcards.length > 0) {
