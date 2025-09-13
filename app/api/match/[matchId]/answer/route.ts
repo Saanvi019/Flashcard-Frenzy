@@ -5,22 +5,26 @@ interface Body {
   userId: string;
   flashcardId: string;
   selectedOption: string;
-  timeTaken: number; 
+  timeTaken: number;
 }
 
 export async function POST(
   req: NextRequest, 
-  { params }: { params: { matchId: string } }
+  { params }: { params: Promise<{ matchId: string }> }
 ) {
-  const { matchId } = params;
+  
+  const { matchId } = await params;
   const body: Body = await req.json();
   const { userId, flashcardId, selectedOption, timeTaken } = body;
-
+     
   if (!selectedOption) {
     return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
   }
-
-  // Fetch match
+  /*if (!userId || !flashcardId || !selectedOption) {
+    return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
+  }*/
+      
+ 
   const { data: matchData, error: matchError } = await supabase
     .from("matches")
     .select("*")
@@ -31,7 +35,7 @@ export async function POST(
     return NextResponse.json({ error: "Match not found" }, { status: 404 });
   }
 
-  // Fetch flashcard
+  
   const { data: flashcard, error: flashError } = await supabase
     .from("flashcards")
     .select("*")
@@ -45,26 +49,25 @@ export async function POST(
   const correct = flashcard.answer;
   const isCorrect = selectedOption === correct;
 
-  // Ensure scores are numbers
-  const newScore1 = Number(matchData.score1 ?? 0);
-  const newScore2 = Number(matchData.score2 ?? 0);
+ 
+  let newScore1 = matchData.score1;
+  let newScore2 = matchData.score2;
 
-  const updatedScores = {
-    player1: userId === matchData.player1 && isCorrect ? newScore1 + 1 : newScore1,
-    player2: userId === matchData.player2 && isCorrect ? newScore2 + 1 : newScore2,
-  };
+  if (isCorrect) {
+    if (userId === matchData.player1) newScore1 += 1;
+    if (userId === matchData.player2) newScore2 += 1;
+  }
 
-  // Update match scores
   const { error: updateError } = await supabase
     .from("matches")
-    .update({ score1: updatedScores.player1, score2: updatedScores.player2 })
+    .update({ score1: newScore1, score2: newScore2 })
     .eq("id", matchId);
 
   if (updateError) {
     return NextResponse.json({ error: "Failed to update match" }, { status: 500 });
   }
 
-  // Insert player's answer
+
   const { error: answerError } = await supabase
     .from("player_answers")
     .insert([
@@ -81,10 +84,11 @@ export async function POST(
     console.error("Failed to insert player answer:", answerError);
   }
 
+
   return NextResponse.json({
     yourAnswerCorrect: isCorrect,
     correct,
     result: isCorrect ? "correct" : "wrong",
-    updatedScores,
+    updatedScores: { player1: newScore1, player2: newScore2 },
   });
 }
