@@ -7,20 +7,37 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useState, useEffect } from "react";
 
+// Define the Match type properly
+interface Match {
+  id: string;
+  player1: string;
+  player2: string;
+  round: number;
+  score1: number;
+  score2: number;
+  status: "pending" | "active" | "finished";
+  created_at?: string;
+}
+
+interface OnlineUser {
+  id: string;
+  username?: string;
+  email?: string;
+}
+
 export default function LobbyPage() {
   const { user } = useAuth();
   useOnlineStatus(user?.id, user?.email); 
-  const onlineUsers = useOnlineUsers(user?.id);
+  const onlineUsers = useOnlineUsers(user?.id) as OnlineUser[];
   const router = useRouter();
 
-  const [matches, setMatches] = useState<any[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
-  
   useEffect(() => {
     const fetchMatches = async () => {
       const { data, error } = await supabase.from("matches").select("*");
-      if (!error && data) setMatches(data);
+      if (!error && data) setMatches(data as Match[]);
     };
     fetchMatches();
 
@@ -30,7 +47,7 @@ export default function LobbyPage() {
         "postgres_changes",
         { event: "*", schema: "public", table: "matches" },
         (payload) => {
-          const match = payload.new as { id: string };
+          const match = payload.new as Match;
           setMatches((prev) => {
             const updated = prev.filter((m) => m.id !== match.id);
             return [...updated, match];
@@ -44,7 +61,6 @@ export default function LobbyPage() {
     };
   }, []);
 
-  
   const handleJoinMatch = async () => {
     if (!user || !selectedUserId) {
       alert("Please select a player to start the match.");
@@ -52,7 +68,6 @@ export default function LobbyPage() {
     }
 
     try {
-      
       const { data: existing, error } = await supabase
         .from("matches")
         .select("*")
@@ -60,14 +75,13 @@ export default function LobbyPage() {
           `and(player1.eq.${user.id},player2.eq.${selectedUserId},status.eq.pending),and(player1.eq.${selectedUserId},player2.eq.${user.id},status.eq.pending)`
         )
         .limit(1);
-      
+
       if (error) throw error;
-      
+
       let matchId: string;
 
       if (existing && existing.length > 0) {
-        // Join existing
-        const match = existing[0];
+        const match = existing[0] as Match;
         matchId = match.id;
 
         await supabase
@@ -79,7 +93,6 @@ export default function LobbyPage() {
         return;
       }
 
-      
       const { data: newMatch, error: createError } = await supabase
         .from("matches")
         .insert([
@@ -100,7 +113,7 @@ export default function LobbyPage() {
         return;
       }
 
-      matchId = newMatch.id;
+      matchId = (newMatch as Match).id;
       router.push(`/game/${matchId}`);
     } catch (err) {
       console.error("Error joining match:", err);
@@ -115,7 +128,6 @@ export default function LobbyPage() {
     <div className="min-h-screen bg-gradient-to-b from-[#b594d0] to-[#f9de90] text-white flex flex-col items-center p-6">
       <h1 className="text-3xl font-bold mb-6">Lobby</h1>
 
-      
       <h2 className="text-xl mb-2">Matches</h2>
       {matches.length === 0 ? (
         <p className="text-gray-400">No matches yet.</p>
@@ -142,7 +154,6 @@ export default function LobbyPage() {
         </ul>
       )}
 
-      
       <h2 className="text-xl mb-2">Players Online</h2>
       {uniqueOnlineUsers.length === 0 ? (
         <p className="text-gray-400">No other users online.</p>

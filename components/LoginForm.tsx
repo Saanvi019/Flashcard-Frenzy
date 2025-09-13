@@ -23,12 +23,17 @@ export default function LoginForm() {
     setLoading(true);
     try {
       await signIn(email, password);
-      // 🚀 redirect to lobby page
+      
       router.push("/lobby");
       setEmail("");
       setPassword("");
-    } catch (err: any) {
-      setErrorMsg(err.message || "Invalid email or password.");
+    } catch (err) {
+  
+  if (err instanceof Error) {
+    setErrorMsg(err.message);
+  } else {
+    setErrorMsg("Invalid email or password.");
+  }
     } finally {
       setLoading(false);
     }

@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
 import { use } from "react";
 import { useRouter } from "next/navigation";
+import { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 
 
@@ -63,7 +64,7 @@ useEffect(() => {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "matches", filter: `id=eq.${matchId}` },
-        (payload: any) => {
+        (payload: RealtimePostgresChangesPayload<any>) => {
           setMatch(payload.new);
 
           if (payload.new.scores && flashcards.length > 0) {
